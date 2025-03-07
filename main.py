@@ -45,7 +45,7 @@ Please check:
         return ["local-model"]
 
 # Function to get available models from Amazon Bedrock
-def get_bedrock_models(access_key, secret_key, region):
+def get_bedrock_models(access_key, secret_key, region, session_token=None):
     try:
         import boto3
         from botocore.exceptions import ClientError
@@ -54,6 +54,7 @@ def get_bedrock_models(access_key, secret_key, region):
         session = boto3.Session(
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
+            aws_session_token=session_token,
             region_name=region
         )
         
@@ -335,7 +336,7 @@ def load_env_variables():
     if groq_api_key:
         st.session_state['groq_api_key'] = groq_api_key
 
-    # Add AWS Bedrock API keys and region
+    # Add AWS Bedrock API keys, region, and session token
     aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
     if aws_access_key:
         st.session_state['aws_access_key'] = aws_access_key
@@ -347,6 +348,10 @@ def load_env_variables():
     aws_region = os.getenv('AWS_REGION', 'us-east-1')
     if aws_region:
         st.session_state['aws_region'] = aws_region
+
+    aws_session_token = os.getenv('AWS_SESSION_TOKEN')
+    if aws_session_token:
+        st.session_state['aws_session_token'] = aws_session_token
 
     # Add Ollama endpoint configuration
     ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
@@ -656,10 +661,19 @@ with st.sidebar:
         if aws_region:
             st.session_state['aws_region'] = aws_region
 
+        aws_session_token = st.text_input(
+            "Enter your AWS Session Token (optional):",
+            value=st.session_state.get('aws_session_token', ''),
+            type="password",
+            help="Your AWS Session Token for temporary credentials (optional)",
+        )
+        if aws_session_token:
+            st.session_state['aws_session_token'] = aws_session_token
+
         # Fetch available models from Amazon Bedrock when credentials are provided
         available_models = ["anthropic.claude-3-sonnet-20240229-v1:0"]  # Default fallback
         if aws_access_key and aws_secret_key and aws_region:
-            available_models = get_bedrock_models(aws_access_key, aws_secret_key, aws_region)
+            available_models = get_bedrock_models(aws_access_key, aws_secret_key, aws_region, aws_session_token)
 
         # Add model selection input field
         bedrock_model = st.selectbox(
@@ -908,7 +922,8 @@ understanding possible vulnerabilities and attack vectors. Use this tab to gener
                             st.session_state['aws_secret_key'], 
                             st.session_state['aws_region'], 
                             bedrock_model, 
-                            threat_model_prompt
+                            threat_model_prompt,
+                            st.session_state.get('aws_session_token')
                         )
                     elif model_provider == "Groq API":
                         model_output = get_threat_model_groq(groq_api_key, groq_model, threat_model_prompt)

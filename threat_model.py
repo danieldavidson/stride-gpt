@@ -410,7 +410,7 @@ def get_threat_model_groq(groq_api_key, groq_model, prompt):
     return response_content
 
 # Function to get threat model from Amazon Bedrock
-def get_threat_model_bedrock(aws_access_key, aws_secret_key, aws_region, model_id, prompt):
+def get_threat_model_bedrock(aws_access_key, aws_secret_key, aws_region, model_id, prompt, aws_session_token=None):
     """
     Get threat model from Amazon Bedrock model.
     
@@ -420,6 +420,7 @@ def get_threat_model_bedrock(aws_access_key, aws_secret_key, aws_region, model_i
         aws_region (str): AWS Region (e.g., 'us-east-1')
         model_id (str): Amazon Bedrock model ID (e.g., 'anthropic.claude-3-sonnet-20240229-v1:0')
         prompt (str): The prompt to send to the model
+        aws_session_token (str, optional): AWS Session Token for temporary credentials
         
     Returns:
         dict: The parsed JSON response from the model
@@ -432,6 +433,7 @@ def get_threat_model_bedrock(aws_access_key, aws_secret_key, aws_region, model_i
         session = boto3.Session(
             aws_access_key_id=aws_access_key,
             aws_secret_access_key=aws_secret_key,
+            aws_session_token=aws_session_token,
             region_name=aws_region
         )
         
@@ -448,7 +450,6 @@ def get_threat_model_bedrock(aws_access_key, aws_secret_key, aws_region, model_i
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
-                "response_format": {"type": "json_object"}
             }
         elif model_id.startswith('meta.'):
             # Llama models (Meta)
