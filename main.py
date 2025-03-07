@@ -12,11 +12,11 @@ from openai import OpenAI
 import requests
 import json
 
-from threat_model import create_threat_model_prompt, get_threat_model, get_threat_model_azure, get_threat_model_google, get_threat_model_mistral, get_threat_model_ollama, get_threat_model_anthropic, get_threat_model_lm_studio, get_threat_model_groq, get_threat_model_bedrock, json_to_markdown, get_image_analysis, create_image_analysis_prompt
-from attack_tree import create_attack_tree_prompt, get_attack_tree, get_attack_tree_azure, get_attack_tree_mistral, get_attack_tree_ollama, get_attack_tree_anthropic, get_attack_tree_lm_studio, get_attack_tree_groq, get_attack_tree_google
-from mitigations import create_mitigations_prompt, get_mitigations, get_mitigations_azure, get_mitigations_google, get_mitigations_mistral, get_mitigations_ollama, get_mitigations_anthropic, get_mitigations_lm_studio, get_mitigations_groq
-from test_cases import create_test_cases_prompt, get_test_cases, get_test_cases_azure, get_test_cases_google, get_test_cases_mistral, get_test_cases_ollama, get_test_cases_anthropic, get_test_cases_lm_studio, get_test_cases_groq
-from dread import create_dread_assessment_prompt, get_dread_assessment, get_dread_assessment_azure, get_dread_assessment_google, get_dread_assessment_mistral, get_dread_assessment_ollama, get_dread_assessment_anthropic, get_dread_assessment_lm_studio, get_dread_assessment_groq, dread_json_to_markdown
+from threat_model import create_threat_model_prompt, get_threat_model, get_threat_model_azure, get_threat_model_google, get_threat_model_mistral, get_threat_model_ollama, get_threat_model_anthropic, get_threat_model_lm_studio, get_threat_model_groq, get_threat_model_bedrock, get_threat_model_openai_compatible, json_to_markdown, get_image_analysis, create_image_analysis_prompt
+from attack_tree import create_attack_tree_prompt, get_attack_tree, get_attack_tree_azure, get_attack_tree_mistral, get_attack_tree_ollama, get_attack_tree_anthropic, get_attack_tree_lm_studio, get_attack_tree_groq, get_attack_tree_google, get_attack_tree_openai_compatible
+from mitigations import create_mitigations_prompt, get_mitigations, get_mitigations_azure, get_mitigations_google, get_mitigations_mistral, get_mitigations_ollama, get_mitigations_anthropic, get_mitigations_lm_studio, get_mitigations_groq, get_mitigations_openai_compatible
+from test_cases import create_test_cases_prompt, get_test_cases, get_test_cases_azure, get_test_cases_google, get_test_cases_mistral, get_test_cases_ollama, get_test_cases_anthropic, get_test_cases_lm_studio, get_test_cases_groq, get_test_cases_openai_compatible
+from dread import create_dread_assessment_prompt, get_dread_assessment, get_dread_assessment_azure, get_dread_assessment_google, get_dread_assessment_mistral, get_dread_assessment_ollama, get_dread_assessment_anthropic, get_dread_assessment_lm_studio, get_dread_assessment_groq, get_dread_assessment_openai_compatible, dread_json_to_markdown
 
 # ------------------ Helper Functions ------------------ #
 
@@ -111,6 +111,68 @@ Please check:
 2. The specified region supports Amazon Bedrock
 3. Your account has been granted access to Amazon Bedrock models""")
         return ["anthropic.claude-3-sonnet-20240229-v1:0"]  # Default model as fallback
+
+# Function to get available models from OpenAI compatible API
+def get_openai_compatible_models(base_url, api_key):
+    try:
+        # Make a direct HTTP GET request to the models endpoint
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+        models_url = f"{base_url.rstrip('/')}/models"
+        
+        response = requests.get(models_url, headers=headers, timeout=10)
+        response.raise_for_status()  # Raise exception for bad status codes
+        
+        models_data = response.json()
+        
+        # Extract model IDs from the response
+        if 'data' in models_data and isinstance(models_data['data'], list):
+            model_ids = [model.get('id') for model in models_data['data'] if model.get('id')]
+            if model_ids:
+                return sorted(model_ids)
+        
+        # If no models found or unexpected format, return default models
+        st.warning("""No models found or unexpected response format from the OpenAI compatible API.
+Please ensure:
+1. The base URL is correct
+2. Your API key has the necessary permissions
+3. The API is compatible with OpenAI's models endpoint""")
+        return ["gpt-3.5-turbo", "gpt-4"]  # Default models as fallback
+            
+    except requests.exceptions.ConnectionError:
+        st.error("""Unable to connect to the OpenAI compatible API. Please ensure:
+1. The base URL is correct and accessible
+2. Your network connection is stable
+3. No firewall is blocking the connection""")
+        return ["gpt-3.5-turbo", "gpt-4"]
+    except requests.exceptions.Timeout:
+        st.error("""Request to the OpenAI compatible API timed out. Please check:
+1. The service is responding and not overloaded
+2. Your network connection is stable
+3. The base URL is correct and accessible""")
+        return ["gpt-3.5-turbo", "gpt-4"]
+    except requests.exceptions.HTTPError as e:
+        st.error(f"""HTTP error when accessing the OpenAI compatible API: {str(e)}
+        
+Please check:
+1. Your API key is valid
+2. The base URL is correct
+3. The API is compatible with OpenAI's models endpoint""")
+        return ["gpt-3.5-turbo", "gpt-4"]
+    except (KeyError, json.JSONDecodeError):
+        st.error("""Received invalid JSON response from the OpenAI compatible API. Please verify:
+1. The API is OpenAI compatible
+2. The base URL is pointing to the correct service""")
+        return ["gpt-3.5-turbo", "gpt-4"]
+    except Exception as e:
+        st.error(f"""Unexpected error accessing the OpenAI compatible API: {str(e)}
+        
+Please check:
+1. The base URL is correct
+2. Your API key is valid
+3. The API is OpenAI compatible""")
+        return ["gpt-3.5-turbo", "gpt-4"]
 
 def get_ollama_models(ollama_endpoint):
     """
@@ -353,6 +415,15 @@ def load_env_variables():
     if aws_session_token:
         st.session_state['aws_session_token'] = aws_session_token
 
+    # Add OpenAI Compatible API settings
+    openai_compatible_base_url = os.getenv('OPENAI_COMPATIBLE_BASE_URL')
+    if openai_compatible_base_url:
+        st.session_state['openai_compatible_base_url'] = openai_compatible_base_url
+        
+    openai_compatible_api_key = os.getenv('OPENAI_COMPATIBLE_API_KEY')
+    if openai_compatible_api_key:
+        st.session_state['openai_compatible_api_key'] = openai_compatible_api_key
+
     # Add Ollama endpoint configuration
     ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
     st.session_state['ollama_endpoint'] = ollama_endpoint
@@ -384,7 +455,7 @@ with st.sidebar:
     # Add model selection input field to the sidebar
     model_provider = st.selectbox(
         "Select your preferred model provider:",
-        ["OpenAI API", "Anthropic API", "Azure OpenAI Service", "Google AI API", "Mistral API", "Groq API", "Ollama", "LM Studio Server", "Amazon Bedrock"],
+        ["OpenAI API", "Anthropic API", "Azure OpenAI Service", "Google AI API", "Mistral API", "Groq API", "Ollama", "LM Studio Server", "Amazon Bedrock", "OpenAI Compatible"],
         key="model_provider",
         help="Select the model provider you would like to use. This will determine the models available for selection.",
     )
@@ -689,6 +760,57 @@ with st.sidebar:
         2. Request and be granted access to models in the AWS Console
         3. Create an IAM user/role with appropriate Bedrock permissions
         """)
+
+    if model_provider == "OpenAI Compatible":
+        st.markdown(
+        """
+    1. Enter your base URL and API key for an OpenAI-compatible API below 🔑
+    2. Provide details of the application that you would like to threat model 📝
+    3. Generate a threat list, attack tree and/or mitigating controls for your application 🚀
+    """
+        )
+        # Add OpenAI Compatible API configuration fields
+        openai_compatible_base_url = st.text_input(
+            "Enter the base URL for the OpenAI-compatible API:",
+            value=st.session_state.get('openai_compatible_base_url', 'https://api.together.xyz/v1'),
+            help="The base URL for the OpenAI-compatible API (e.g., https://api.together.xyz/v1)",
+        )
+        if openai_compatible_base_url:
+            # Basic URL validation
+            if not openai_compatible_base_url.startswith(('http://', 'https://')):
+                st.error("Base URL must start with http:// or https://")
+            else:
+                st.session_state['openai_compatible_base_url'] = openai_compatible_base_url
+                
+        openai_compatible_api_key = st.text_input(
+            "Enter your API key for the OpenAI-compatible API:",
+            value=st.session_state.get('openai_compatible_api_key', ''),
+            type="password",
+            help="Your API key for the OpenAI-compatible service",
+        )
+        if openai_compatible_api_key:
+            st.session_state['openai_compatible_api_key'] = openai_compatible_api_key
+
+        # Fetch available models from OpenAI Compatible API when credentials are provided
+        available_models = ["gpt-3.5-turbo", "gpt-4"]  # Default fallback
+        if openai_compatible_base_url and openai_compatible_api_key and openai_compatible_base_url.startswith(('http://', 'https://')):
+            available_models = get_openai_compatible_models(openai_compatible_base_url, openai_compatible_api_key)
+
+        # Add model selection input field
+        openai_compatible_model = st.selectbox(
+            "Select the model you would like to use:",
+            available_models,
+            key="selected_model",
+            help="Select a model from the OpenAI-compatible API."
+        )
+        
+        st.info("""
+        Note: This option is for OpenAI-compatible APIs like:
+        1. Together.ai API
+        2. Anyscale API
+        3. Local servers that implement the OpenAI API format
+        4. Self-hosted LLMs with OpenAI compatibility layers
+        """)
         
 
     # Add GitHub API key input field to the sidebar
@@ -925,6 +1047,13 @@ understanding possible vulnerabilities and attack vectors. Use this tab to gener
                             threat_model_prompt,
                             st.session_state.get('aws_session_token')
                         )
+                    elif model_provider == "OpenAI Compatible":
+                        model_output = get_threat_model_openai_compatible(
+                            st.session_state['openai_compatible_base_url'],
+                            st.session_state['openai_compatible_api_key'],
+                            openai_compatible_model,
+                            threat_model_prompt
+                        )
                     elif model_provider == "Groq API":
                         model_output = get_threat_model_groq(groq_api_key, groq_model, threat_model_prompt)
 
@@ -1006,6 +1135,13 @@ vulnerabilities and prioritising mitigation efforts.
                         mermaid_code = get_attack_tree_anthropic(anthropic_api_key, anthropic_model, attack_tree_prompt)
                     elif model_provider == "LM Studio Server":
                         mermaid_code = get_attack_tree_lm_studio(st.session_state['lm_studio_endpoint'], selected_model, attack_tree_prompt)
+                    elif model_provider == "OpenAI Compatible":
+                        mermaid_code = get_attack_tree_openai_compatible(
+                            st.session_state['openai_compatible_base_url'],
+                            st.session_state['openai_compatible_api_key'],
+                            openai_compatible_model,
+                            attack_tree_prompt
+                        )
                     elif model_provider == "Groq API":
                         mermaid_code = get_attack_tree_groq(groq_api_key, groq_model, attack_tree_prompt)
 
@@ -1093,6 +1229,13 @@ the security posture of the application and protect against potential attacks.
                             mitigations_markdown = get_mitigations_anthropic(anthropic_api_key, anthropic_model, mitigations_prompt)
                         elif model_provider == "LM Studio Server":
                             mitigations_markdown = get_mitigations_lm_studio(st.session_state['lm_studio_endpoint'], selected_model, mitigations_prompt)
+                        elif model_provider == "OpenAI Compatible":
+                            mitigations_markdown = get_mitigations_openai_compatible(
+                                st.session_state['openai_compatible_base_url'],
+                                st.session_state['openai_compatible_api_key'],
+                                openai_compatible_model,
+                                mitigations_prompt
+                            )
                         elif model_provider == "Groq API":
                             mitigations_markdown = get_mitigations_groq(groq_api_key, groq_model, mitigations_prompt)
 
@@ -1159,6 +1302,13 @@ focusing on the most critical threats first. Use this tab to perform a DREAD ris
                             dread_assessment = get_dread_assessment_anthropic(anthropic_api_key, anthropic_model, dread_assessment_prompt)
                         elif model_provider == "LM Studio Server":
                             dread_assessment = get_dread_assessment_lm_studio(st.session_state['lm_studio_endpoint'], selected_model, dread_assessment_prompt)
+                        elif model_provider == "OpenAI Compatible":
+                            dread_assessment = get_dread_assessment_openai_compatible(
+                                st.session_state['openai_compatible_base_url'],
+                                st.session_state['openai_compatible_api_key'],
+                                openai_compatible_model,
+                                dread_assessment_prompt
+                            )
                         elif model_provider == "Groq API":
                             dread_assessment = get_dread_assessment_groq(groq_api_key, groq_model, dread_assessment_prompt)
                         
@@ -1231,6 +1381,13 @@ scenarios.
                             test_cases_markdown = get_test_cases_anthropic(anthropic_api_key, anthropic_model, test_cases_prompt)
                         elif model_provider == "LM Studio Server":
                             test_cases_markdown = get_test_cases_lm_studio(st.session_state['lm_studio_endpoint'], selected_model, test_cases_prompt)
+                        elif model_provider == "OpenAI Compatible":
+                            test_cases_markdown = get_test_cases_openai_compatible(
+                                st.session_state['openai_compatible_base_url'],
+                                st.session_state['openai_compatible_api_key'],
+                                openai_compatible_model,
+                                test_cases_prompt
+                            )
                         elif model_provider == "Groq API":
                             test_cases_markdown = get_test_cases_groq(groq_api_key, groq_model, test_cases_prompt)
 

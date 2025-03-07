@@ -409,6 +409,52 @@ def get_threat_model_groq(groq_api_key, groq_model, prompt):
 
     return response_content
 
+# Function to get threat model from OpenAI Compatible API
+def get_threat_model_openai_compatible(base_url, api_key, model_name, prompt):
+    """
+    Get threat model from an OpenAI-compatible API.
+    
+    Args:
+        base_url (str): The base URL for the OpenAI-compatible API
+        api_key (str): The API key for the OpenAI-compatible service
+        model_name (str): The name of the model to use
+        prompt (str): The prompt to send to the model
+        
+    Returns:
+        dict: The parsed JSON response from the model
+    """
+    try:
+        client = OpenAI(
+            base_url=base_url,
+            api_key=api_key
+        )
+
+        response = client.chat.completions.create(
+            model=model_name,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=4000
+        )
+
+        # Convert the JSON string in the 'content' field to a Python dictionary
+        response_content = json.loads(response.choices[0].message.content)
+
+        return response_content
+    except Exception as e:
+        st.error(f"Error getting threat model from OpenAI Compatible API: {str(e)}")
+        
+        # Return a minimal valid response structure to avoid breaking the UI
+        return {
+            "threat_model": [],
+            "improvement_suggestions": [
+                f"Error processing model response: {str(e)}",
+                "Please check your API key, base URL, and model name, then try again."
+            ]
+        }
+
 # Function to get threat model from Amazon Bedrock
 def get_threat_model_bedrock(aws_access_key, aws_secret_key, aws_region, model_id, prompt, aws_session_token=None):
     """

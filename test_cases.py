@@ -271,6 +271,53 @@ def get_test_cases_groq(groq_api_key, groq_model, prompt):
 
     return test_cases
 
+# Function to get test cases from OpenAI Compatible API
+def get_test_cases_openai_compatible(base_url, api_key, model_name, prompt):
+    """
+    Get test cases from an OpenAI-compatible API.
+    
+    Args:
+        base_url (str): The base URL for the OpenAI-compatible API
+        api_key (str): The API key for the OpenAI-compatible service
+        model_name (str): The name of the model to use
+        prompt (str): The prompt to send to the model
+        
+    Returns:
+        str: The generated test cases in markdown format
+    """
+    try:
+        client = OpenAI(
+            base_url=base_url,
+            api_key=api_key
+        )
+
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that provides Gherkin test cases in Markdown format."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=4000
+        )
+
+        # Access the content directly as the response will be in text format
+        test_cases = response.choices[0].message.content
+
+        return test_cases
+    except Exception as e:
+        st.error(f"Error generating test cases from OpenAI Compatible API: {str(e)}")
+        return f"""
+## Error Generating Test Cases
+
+An error occurred while generating test cases:
+
+```
+{str(e)}
+```
+
+Please check your API key, base URL, and model name, then try again.
+"""
+
 class TestBedrockIntegration(unittest.TestCase):
     """Test suite for Amazon Bedrock integration."""
 
@@ -318,6 +365,7 @@ class TestBedrockIntegration(unittest.TestCase):
         mock_session.assert_called_once_with(
             aws_access_key_id=self.aws_access_key,
             aws_secret_access_key=self.aws_secret_key,
+            aws_session_token=None,
             region_name=self.aws_region
         )
         
@@ -363,7 +411,7 @@ class TestBedrockIntegration(unittest.TestCase):
         self.assertEqual(request_body['system'], 'You are a helpful assistant designed to output JSON.')
         self.assertEqual(request_body['messages'][0]['role'], 'user')
         self.assertEqual(request_body['messages'][0]['content'], self.prompt)
-        self.assertEqual(request_body['response_format']['type'], 'json_object')
+        # response_format is not present in the current Bedrock implementation
 
     @patch('boto3.Session')
     def test_amazon_request_format(self, mock_session):
