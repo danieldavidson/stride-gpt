@@ -127,8 +127,8 @@ def get_openai_compatible_models(base_url, api_key):
         models_data = response.json()
         
         # Extract model IDs from the response
-        if 'data' in models_data and isinstance(models_data['data'], list):
-            model_ids = [model.get('id') for model in models_data['data'] if model.get('id')]
+        if isinstance(models_data, list):
+            model_ids = [model.get('id') for model in models_data if model.get('id')]
             if model_ids:
                 return sorted(model_ids)
         

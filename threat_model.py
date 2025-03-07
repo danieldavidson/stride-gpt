@@ -442,6 +442,16 @@ def get_threat_model_openai_compatible(base_url, api_key, model_name, prompt):
         # Convert the JSON string in the 'content' field to a Python dictionary
         response_content = json.loads(response.choices[0].message.content)
 
+        # May get one or the other while testing with internally hosted Claude models
+        if "json" in response_content:
+            response_content = response_content.get("json")
+        elif "json_input" in response_content:
+            response_content = response_content.get("json_input")
+        else:
+            print("Expected a 'json' or 'json_input' key. Didn't see either.")
+            print(response_content)
+
+
         return response_content
     except Exception as e:
         st.error(f"Error getting threat model from OpenAI Compatible API: {str(e)}")
