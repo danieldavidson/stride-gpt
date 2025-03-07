@@ -442,15 +442,21 @@ def get_threat_model_openai_compatible(base_url, api_key, model_name, prompt):
         # Convert the JSON string in the 'content' field to a Python dictionary
         response_content = json.loads(response.choices[0].message.content)
 
-        # May get one or the other while testing with internally hosted Claude models
-        if "json" in response_content:
-            response_content = response_content.get("json")
-        elif "json_input" in response_content:
-            response_content = response_content.get("json_input")
-        else:
-            print("Expected a 'json' or 'json_input' key. Didn't see either.")
-            print(response_content)
+        # In testing the 'threat model' and 'improvement suggestions' keys seem
+        # to get a random parent key. Look through the keys of response_content
+        # and extract the dict that has 'threat model' and
+        # 'improvement suggestions'.
+        flag = False
+        for key in response_content:
+            if ("threat_model" in response_content[key]
+                    or "improvement_suggestions" in response_content):
+                flag = True
+                response_content = response_content[key]
 
+        if not flag:
+            st.warning(f"Couldn't find 'threat model' or 'improvement suggestions' keys in the response from {model_name}.")
+            print(f"Couldn't find 'threat model' or 'improvement suggestions' keys in the response from {model_name}.")
+            print(f"\n\n{response_content}")
 
         return response_content
     except Exception as e:
