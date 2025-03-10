@@ -265,6 +265,8 @@ def get_input():
     return input_text
 
 def analyze_github_repo(repo_url):
+    import concurrent.futures
+    
     # Extract owner and repo name from URL
     parts = repo_url.split('/')
     owner = parts[-2]
@@ -287,22 +289,70 @@ def analyze_github_repo(repo_url):
     total_chars = 0
     char_limit = 100000  # Adjust this based on your model's token limit
     readme_content = ""
-
+    
+    # Find readme file
     for file in tree.tree:
         if file.path.lower() == 'readme.md':
             content = repo.get_contents(file.path, ref=default_branch)
             readme_content = base64.b64decode(content.content).decode()
-        elif file.type == "blob" and file.path.endswith(('.py', '.js', '.ts', '.html', '.css', '.java', '.go', '.rb')):
-            content = repo.get_contents(file.path, ref=default_branch)
-            decoded_content = base64.b64decode(content.content).decode()
-            
-            # Summarize the file content
-            summary = summarize_file(file.path, decoded_content)
-            file_summaries[file.path.split('.')[-1]].append(summary)
-            
-            total_chars += len(summary)
-            if total_chars > char_limit:
-                break
+            break
+    
+    # Function to process a single file
+    def process_file(file):
+        if file.type == "blob" and file.path.endswith(('.py', '.js', '.ts', '.html', '.css', '.java', '.go', '.rb')):
+            try:
+                content = repo.get_contents(file.path, ref=default_branch)
+                decoded_content = base64.b64decode(content.content).decode()
+                
+                # Summarize the file content
+                summary = summarize_file(file.path, decoded_content)
+                return (file.path.split('.')[-1], summary, len(summary))
+            except Exception as e:
+                return None
+        return None
+    
+    # Collect all files to process
+    files_to_process = []
+    for file in tree.tree:
+        if file.type == "blob" and file.path.endswith(('.py', '.js', '.ts', '.html', '.css', '.java', '.go', '.rb')):
+            files_to_process.append(file)
+    
+    # Determine optimal number of workers based on system resources and workload
+    import os
+    import multiprocessing
+    
+    # Get number of available CPU cores
+    cpu_count = multiprocessing.cpu_count()
+    
+    # Determine optimal worker count based on:
+    # 1. Number of CPU cores (for CPU-bound tasks)
+    # 2. Size of the workload (number of files to process)
+    # 3. IO-bound nature of the task (we're making network requests)
+    
+    # For IO-bound tasks like API calls, using more threads than CPU cores can be beneficial
+    # We'll use a simple formula: min(2 * cpu_count + 4, len(files_to_process), 32)
+    # This ensures we have enough threads for IO-waiting but not too many to cause overhead
+    worker_count = min(2 * cpu_count + 4, len(files_to_process), 32)
+    
+    # Process files in parallel
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {executor.submit(process_file, file): file for file in files_to_process}
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if result:
+                file_ext, summary, char_count = result
+                results.append((file_ext, summary, char_count))
+                total_chars += char_count
+                if total_chars > char_limit:
+                    # Cancel remaining futures if we hit the character limit
+                    for f in futures:
+                        f.cancel()
+                    break
+    
+    # Sort and add results to file_summaries
+    for file_ext, summary, _ in results:
+        file_summaries[file_ext].append(summary)
 
     # Compile the analysis into a system description
     system_description = f"Repository: {repo_url}\n\n"
